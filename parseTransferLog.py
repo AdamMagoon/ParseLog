@@ -1,14 +1,23 @@
 #-*- coding: utf-8 -*-
 
+"""
+    Initial Run-time
+    2.35 Hours
+    141.2 Minutes
+
+"""
+
 import csv
-from os import listdir
+from os import listdir as ld
 from os.path import join
 import re
 import json
 from urllib.request import urlopen
 from time import perf_counter
+from models import Transfer
 
 start = perf_counter()
+
 
 def get_location_data(ip_address):
     """
@@ -28,36 +37,22 @@ def get_location_data(ip_address):
     return location_object
 
 
-class Transfer:
-    def __init__(self, ip_address, timestamp, request, response_code,
-                 bytes_transfered, referrer, user_agent):
-        self.ip_address = ip_address
-        self.timestamp = timestamp.split()[0]
-        self.request = request
-        self.response_code = response_code
-        self.bytes_transfered = bytes_transfered
-        self.referrer = referrer
-        self.user_agent = user_agent
-
-    def __repr__(self):
-        return "{}\n{}\n{}\n{}\n{}\n{}\n{}".format(self.ip_address,
-                                                   self.timestamp, self.request,
-                                                   self.response_code,
-                                                   self.bytes_transfered,
-                                                   self.referrer,
-                                                   self.user_agent)
-
-
-def parse_transfer_log(file):
-    transfers = []
+def parse_dsa_website_transfer_log(file):
+    """
+        Custom function to parse Nexcess Apache server transfer logs
+        and return a list of Transfer class objects
+    """
+    regex = r'([0-9.]+) - - \[(.*)\] "([\w]+ [\S]+ [\S]+|.*)" (\d+) (\d+)?-? "(.*?)" "(.*?)"'
+    pattern = re.compile(regex)
+    log_entries = []
 
     with open(file, 'r', errors='replace') as f:
             for line in f:
                 result = pattern.match(line)
                 if result:
-                    transfers.append(Transfer(*result.groups()))
+                    log_entries.append(Transfer(*result.groups()))
 
-    return transfers
+    return log_entries
 
 
 def unique_requests(transfers):
@@ -76,54 +71,67 @@ def unique_ip_addresses(transfers):
     return unique_ips
 
 
-def display_locations(unique_ips):
+def locations_from_ips(unique_ips):
+    """
+        Accepts a list of ip addresses and returns a list of
+        formatted strings
+    """
+    loc_list = []
     for ip in unique_ips:
-        location = get_location_data(ip)
-        print("{}, {}, {}  -  {}".format(location['city'], location['regionName'],
-                                     location['country'], location['query']))
+        loc = get_location_data(ip)
+        formated = "{}, {}, {}  -  {}".format(loc['city'], loc['regionName'],
+                                     loc['country'], loc['query'])
+        loc_list.append(formated)
+
+    return loc_list
 
 
-external_file = r"W:\Web\Backups\Transfer Logs\03202016-transfer.log"
-regex = r'([0-9.]+) - - \[(.*)\] "([\w]+ [\S]+ [\S]+|.*)" (\d+) (\d+)?-? "(.*?)" "(.*?)"'
-pattern = re.compile(regex)
+def location_from_ip(ip_address):
+    """
+        Accepts an ip addresses as a string and returns a formatted string
+    """
 
-# unique_req = unique_requests(transfers)
-# display_locations(unique_ips)
-filters = ['POST']
+    loc = get_location_data(ip_address)
+    formated = "{}, {}, {}".format(loc['city'], loc['regionName'],
+                                 loc['country'])
+
+    return formated
+
+
 state_filters = ['New Jersey', 'New Hampshire', 'Massachusetts']
-
 external_dir = 'W:\Web\Backups\Transfer Logs'
+files = [join(external_dir, external_file) for external_file in ld(external_dir)]
 
-files = [join(external_dir, external_file) for external_file in listdir(external_dir)]
+# Most common ip addresses with counts
+ip_count = {}
+unique_post_requests = set()
+for file in files:
+    log_entries = parse_dsa_website_transfer_log(file)
 
-for external_file in files:
-    transfers = parse_transfer_log(external_file)
+    for log in log_entries:
 
-    for t in transfers:
-        if t.ip_address == '69.164.208.136':
-            print(t.ip_address)
-            location = get_location_data(t.ip_address)
-            with open('unique_ip - log.txt', 'a+', errors='replace') as fi:
-                msg = "{} - {}, {}, {}  -  {}  -  {}\n".format(t.timestamp, location['city'], location['regionName'], location['country'], t.ip_address, t.request)
-                try:
-                    fi.write(msg)
-                except UnicodeEncodeError as e:
-                    print(e)
-                    pass
-        # for f in filters:
-        #     if f in t.request:
-        #         location = get_location_data(t.ip_address)
-        #         if location['regionName'] in state_filters:
-        #             with open('dump_file2.txt', 'a') as fi:
-        #                 msg = "{} - {}, {}, {}  -  {}  -  {}\n".format(t.timestamp, location['city'], location['regionName'], location['country'], t.ip_address, t.request)
-        #                 try:
-        #                     fi.write(msg)
-        #                 except UnicodeEncodeError as e:
-        #                     print(e)
-        #                     pass
+        if log.ip_address in ip_count:
+            ip_count[log.ip_address] += 1
+        else:
+            ip_count[log.ip_address] = 1
+
+        if 'POST' in log.request:
+            unique_post_requests.add(log.request)
+
+with open('posts_and_ipcounts.txt', 'a', errors='replace') as f:
+    f.write("Unique Post Requests and IP Address Counts\n")
+
+    for post in unique_post_requests:
+        post = post.split()[1]
+        f.write(post + '\n')
+
+    f.write('\n')
+    sorted_ip_counts = ((k, ip_count[k]) for k in sorted(ip_count, key=ip_count.get, reverse=True))
+    i = 0
+    for k, v in sorted_ip_counts:
+        loc = location_from_ip(k)
+        f.write("{} - {} - {}\n".format(v, k, loc))
+        i += 1
+        print(i)
 
 print("Total time: {} seconds".format(perf_counter() - start))
-
-
-
-
