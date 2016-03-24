@@ -1,0 +1,14 @@
+.idea/
+cache_files
+cache_files.sqlite
+add_to_db_script.py
+interview_questions.py
+local_db.sqlite
+new_test_db.sqlite
+__pycache__/*
+core/__pycache__/*
+resources/*
+dist/*
+static/img/*
+DevDirectory/*
+
