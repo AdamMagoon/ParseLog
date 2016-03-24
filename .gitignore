@@ -11,4 +11,5 @@ resources/*
 dist/*
 static/img/*
 DevDirectory/*
+*.txt
 
