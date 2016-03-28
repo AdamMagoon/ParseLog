@@ -7,14 +7,13 @@
 
 """
 
-import csv
-from os import listdir as ld
+from os import listdir
 from os.path import join
 import re
 import json
 from urllib.request import urlopen
 from time import perf_counter
-from models import Transfer
+from models import Transfer, CustomerTracker
 
 start = perf_counter()
 
@@ -98,40 +97,45 @@ def location_from_ip(ip_address):
     return formated
 
 
+# Must use full state names
+data_source = 'W:\Web\Backups\Transfer Logs'
 state_filters = ['New Jersey', 'New Hampshire', 'Massachusetts']
-external_dir = 'W:\Web\Backups\Transfer Logs'
-files = [join(external_dir, external_file) for external_file in ld(external_dir)]
 
-# Most common ip addresses with counts
-ip_count = {}
-unique_post_requests = set()
-for file in files:
-    log_entries = parse_dsa_website_transfer_log(file)
+# Tracking data
+ip_count = {}  # Counts how many times an IP address shows up
 
-    for log in log_entries:
 
-        if log.ip_address in ip_count:
-            ip_count[log.ip_address] += 1
-        else:
-            ip_count[log.ip_address] = 1
+# Compile data_source log info into line-by-line class instances
+def compile_logs_into_customers(data_source):
+    track_customers = {}  # Saves class instances of CustomerTracker class based on IP address
+    files = [join(data_source, external_file) for external_file in listdir(data_source)]
 
-        if 'POST' in log.request:
-            unique_post_requests.add(log.request)
+    for file in files:
+        log_entries = parse_dsa_website_transfer_log(file)
 
-with open('posts_and_ipcounts.txt', 'a', errors='replace') as f:
-    f.write("Unique Post Requests and IP Address Counts\n")
+        for log in log_entries:  # log = Transfer() instance
 
-    for post in unique_post_requests:
-        post = post.split()[1]
-        f.write(post + '\n')
+            # If IP Address exists within dict, add Transfer instance to value
+            if log.ip_address in track_customers:
+                track_customers[log.ip_address].add_log(log)
 
-    f.write('\n')
-    sorted_ip_counts = ((k, ip_count[k]) for k in sorted(ip_count, key=ip_count.get, reverse=True))
-    i = 0
-    for k, v in sorted_ip_counts:
-        loc = location_from_ip(k)
-        f.write("{} - {} - {}\n".format(v, k, loc))
-        i += 1
-        print(i)
+            # Else create a CustomerTracker instance and add it to the key's value
+            else:
+                customer = CustomerTracker(log.ip_address)
+                customer.add_log(log)
+                track_customers[log.ip_address] = customer
+
+    return track_customers
+
+track_customers = compile_logs_into_customers(data_source)
+
+login_count = 0
+
+for user in track_customers.values():
+    if len(user.login_instances) > 0:
+        login_count += 1
+        print(user)
+
+print("Total Users That Logged In: {}".format(login_count))
 
 print("Total time: {} seconds".format(perf_counter() - start))
